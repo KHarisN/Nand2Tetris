@@ -1,0 +1,171 @@
+Imports System.ComponentModel.Design
+Imports System.Console
+Imports System.Diagnostics.Eventing
+Imports System.IO
+'2 kinds of instructions: A and C
+'C-instructions: dest = comp ; jump
+'Binary syntax: 1 1 1 a c c c c c c d d d j j j
+'A-instructions:@ xxx
+'Binary syntax: 0 v v v v v v v v v v v v v v v v
+
+Module Program
+    Dim SymbolTable As New Dictionary(Of String, Integer) From {
+    {"SP", 0}, {"LCL", 1}, {"ARG", 2}, {"THIS", 3}, {"THAT", 4},
+    {"R0", 0}, {"R1", 1}, {"R2", 2}, {"R3", 3},
+    {"R4", 4}, {"R5", 5}, {"R6", 6}, {"R7", 7},
+    {"R8", 8}, {"R9", 9}, {"R10", 10}, {"R11", 11},
+    {"R12", 12}, {"R13", 13}, {"R14", 14}, {"R15", 15},
+    {"SCREEN", 16384}, {"KBD", 24576}
+}
+    Dim NextFreeRAM As Integer = 16
+
+    Sub Main(args As String())
+        Dim HackFileWriter As New StreamWriter("c:\Add.hack.TXT", True)
+        Dim AsmString As String
+        Dim HackString As String
+        Dim allLines() As String = File.ReadAllLines("Add.txt")
+        Dim LineCount As Integer = allLines.Length
+        ''First Pass
+        Dim ROMAddress As Integer = 0
+        For count = 0 To LineCount - 1
+            Dim CleanLine = allLines(count).Trim()
+            If CleanLine.StartsWith("(") And CleanLine.EndsWith(")") And CleanLine.Length > 2 Then
+                Dim LabelName As String = CleanLine.Substring(1, CleanLine.Length - 2)
+                If Not SymbolTable.ContainsKey(LabelName) Then
+                    SymbolTable(LabelName) = ROMAddress
+                End If
+            Else
+                ROMAddress += 1
+            End If
+        Next
+        'Second Pass
+        For Count = 0 To LineCount - 1
+            AsmString = allLines(Count)
+            AsmString = AsmString.TrimStart()
+            ' Skip labels in second pass
+            If AsmString.StartsWith("(") And AsmString.EndsWith(")") Then
+                Continue For
+            End If
+            If AsmString.StartsWith("@") Then
+                HackString = AInstruction(AsmString)
+            ElseIf AsmString.StartsWith("//") Then  'Comment
+                Continue For
+            ElseIf AsmString = "" Then  'Blank Line
+                Continue For
+            Else
+                HackString = CInstruction(AsmString)
+            End If
+            HackFileWriter.WriteLine(HackString)
+        Next
+        HackFileWriter.Close()
+    End Sub
+    Function CInstruction(AsmString As String)
+        ' Remove inline comment
+        Dim index As Integer = AsmString.IndexOf("//")
+        If index >= 0 Then AsmString = AsmString.Substring(0, index)
+
+        AsmString = AsmString.Trim()
+
+        Dim dest As String = ""
+        Dim comp As String = ""
+        Dim jump As String = ""
+
+        ' Split into parts (dest=comp;jump)
+        Dim parts = AsmString.Split(";"c)
+        If parts.Length = 2 Then jump = parts(1).Trim()
+        Dim left = parts(0).Trim()
+
+        Dim eq = left.IndexOf("="c)
+        If eq >= 0 Then
+            dest = left.Substring(0, eq).Trim()
+            comp = left.Substring(eq + 1).Trim()
+        Else
+            comp = left.Trim()
+        End If
+
+        'COMP bits
+        Dim compBits As String = ""
+        Select Case comp
+            Case "0" : compBits = "0101010"
+            Case "1" : compBits = "0111111"
+            Case "-1" : compBits = "0111010"
+            Case "D" : compBits = "1110000"
+            Case "A" : compBits = "0110000"
+            Case "M" : compBits = "1110000"
+            Case "!D" : compBits = "0001101"
+            Case "!A" : compBits = "0110001"
+            Case "!M" : compBits = "1110001"
+            Case "-D" : compBits = "0001111"
+            Case "-A" : compBits = "0110011"
+            Case "-M" : compBits = "1110011"
+            Case "D+1" : compBits = "0011111"
+            Case "A+1" : compBits = "0110111"
+            Case "M+1" : compBits = "1110111"
+            Case "D-1" : compBits = "0001110"
+            Case "A-1" : compBits = "0110010"
+            Case "M-1" : compBits = "1110010"
+            Case "D+A" : compBits = "0000010"
+            Case "D+M" : compBits = "1000010"
+            Case "D-A" : compBits = "0010011"
+            Case "D-M" : compBits = "1010011"
+            Case "A-D" : compBits = "0000111"
+            Case "M-D" : compBits = "1000111"
+            Case "D&A" : compBits = "0000000"
+            Case "D&M" : compBits = "1000000"
+            Case "D|A" : compBits = "0010101"
+            Case "D|M" : compBits = "1010101"
+            Case Else
+                compBits = "0000000"
+        End Select
+
+        'DEST bits
+        Dim destBits As String = ""
+        Select Case dest
+            Case "" : destBits = "000"
+            Case "M" : destBits = "001"
+            Case "D" : destBits = "010"
+            Case "MD" : destBits = "011"
+            Case "A" : destBits = "100"
+            Case "AM" : destBits = "101"
+            Case "AD" : destBits = "110"
+            Case "AMD" : destBits = "111"
+        End Select
+
+        'JUMP bits
+        Dim jumpBits As String = ""
+        Select Case jump
+            Case "" : jumpBits = "000"
+            Case "JGT" : jumpBits = "001"
+            Case "JEQ" : jumpBits = "010"
+            Case "JGE" : jumpBits = "011"
+            Case "JLT" : jumpBits = "100"
+            Case "JNE" : jumpBits = "101"
+            Case "JLE" : jumpBits = "110"
+            Case "JMP" : jumpBits = "111"
+        End Select
+
+        Return "111" & compBits & destBits & jumpBits
+    End Function
+
+    Function AInstruction(AsmString As String)
+        Dim symbol = AsmString.Substring(1)  'remove the "@"
+        Dim A_Address As Integer
+        ' check if number or a symbol
+        If Integer.TryParse(symbol, A_Address) Then
+        Else
+            ' symbol: look up in symbol table
+            If Not SymbolTable.ContainsKey(symbol) Then
+                SymbolTable(symbol) = NextFreeRAM
+                NextFreeRAM += 1
+            End If
+            A_Address = SymbolTable(symbol)
+        End If
+        Dim BinaryString As String = Convert.ToString(A_Address, 2)
+        Dim BinaryLength As Integer = Len(BinaryString)
+        Dim AString As String = BinaryString
+        For count = 1 To 16 - BinaryLength
+            AString = "0" + AString
+        Next
+        Return AString
+    End Function
+End Module
