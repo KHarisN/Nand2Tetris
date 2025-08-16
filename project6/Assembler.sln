@@ -1,3 +1,4 @@
+'This code uses the hard-coded file name for Add.asm, the file-name should be changed in the code when using a different assembly script
 Imports System.ComponentModel.Design
 Imports System.Console
 Imports System.Diagnostics.Eventing
