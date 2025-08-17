@@ -72,12 +72,12 @@ Module Program
         Dim jump As String = ""
 
         ' Split into parts (dest=comp;jump)
-        Dim parts = AsmString.Split(";"c)
-        If parts.Length = 2 Then jump = parts(1).Trim()
-        Dim left = parts(0).Trim()
+        Dim parts = AsmString.Split(";"c) 'splits string into parts(0) and parts(1) at the ; character
+        If parts.Length = 2 Then jump = parts(1).Trim()  'if parts is split by a ; then we include jump 
+        Dim left = parts(0).Trim() 'dest and comp included in left
 
-        Dim eq = left.IndexOf("="c)
-        If eq >= 0 Then
+        Dim eq = left.IndexOf("="c)  'separating dest and comp, returns position of equal sign
+        If eq >= 0 Then  'if no equal sign then eq = -1
             dest = left.Substring(0, eq).Trim()
             comp = left.Substring(eq + 1).Trim()
         Else
